@@ -1,0 +1,102 @@
+#!/bin/bash
+
+################################################################################
+## This code is for running all of the code for the EAX homework for Physics 111
+## Advanced Lab at UC Berkeley.
+## Copyright (C) 2013  Rachel Domagalski: idomagalski@berkeley.edu
+##
+## This program is free software: you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation, either version 3 of the License, or
+## (at your option) any later version.
+##
+## This program is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with this program.  If not, see <http://www.gnu.org/licenses/>.
+################################################################################
+
+# Setup the environment
+EAX="$( cd "$(dirname "${BASH_SOURCE[0]}" )"/.. && pwd)"
+export PATH="${PATH}:${EAX}/bin"
+DATA="${EAX}/data"
+PLOT="${EAX}/plot"
+
+# Detect python version
+pyver=`python -c 'import sys; print(sys.version)'`
+pyver="${pyver%%.*}"
+if [ "$pyver" != "2" ]; then
+    python=python2
+else
+    python=python
+fi
+
+quiet=false
+while getopts "qp:" OPTION; do
+    case "$OPTION" in
+        q) quiet=true   ;; # Disable plot display
+        p) problem="$OPTARG"
+    esac
+done
+
+# Run problem 3
+if [ -z "$problem" ] || [ "$problem" = "3" ]; then
+    outfile="${DATA}/problem3"
+    echo "gauss_stats -o ${outfile}.fits"
+    echo
+    gauss_stats -o "${outfile}.fits" || exit $?
+    if [ $quiet = true ]; then
+        echo "i$python -- ${EAX}/bin/plot_prob3.py -i ${outfile}"
+        echo
+        i$python -- "${EAX}/bin/plot_prob3.py" -i "${outfile}"
+    else
+        echo "i$python -- ${EAX}/bin/plot_prob3.py -p -i ${outfile}"
+        echo
+        i$python -- "${EAX}/bin/plot_prob3.py" -p -i "${outfile}"
+    fi || exit $?
+    echo
+fi
+[ "$problem" = "3" ] && exit
+
+# Run problem 4
+if [ -z "$problem" ] || [ "$problem" = "4" ]; then
+    infile="${DATA}/peak.dat"
+    outfile="${DATA}/problem4"
+    echo "gammaray -i ${infile} -o ${outfile}.fits"
+    echo
+    gammaray -i "${DATA}/peak.dat" -o "${outfile}.fits" || exit $?
+    if [ $quiet = true ]; then
+        echo "i$python -- ${EAX}/bin/plot_prob4.py -i ${outfile}"
+        echo
+        i$python -- "${EAX}/bin/plot_prob4.py" -i "${outfile}"
+    else
+        echo "i$python -- ${EAX}/bin/plot_prob4.py -p -i ${outfile}"
+        echo
+        i$python -- "${EAX}/bin/plot_prob4.py" -p -i "${outfile}"
+    fi || exit $?
+    echo
+fi
+[ "$problem" = "4" ] && exit
+
+# Run problem 5
+if [ -z "$problem" ] || [ "$problem" = "5" ]; then
+    infile="${DATA}/optical_data.fits"
+    outfile="${DATA}/problem5"
+    echo "optical_pump -i ${infile} -o ${outfile}.fits"
+    echo
+    optical_pump -i "${infile}" -o "${outfile}.fits" || exit $?
+    if [ $quiet = true ]; then
+        echo "i$python -- ${EAX}/bin/plot_prob5.py -i ${outfile}"
+        echo
+        i$python -- "${EAX}/bin/plot_prob5.py" -i "${outfile}"
+    else
+        echo "i$python -- ${EAX}/bin/plot_prob5.py -p -i ${outfile}"
+        echo
+        i$python -- "${EAX}/bin/plot_prob5.py" -p -i "${outfile}"
+    fi || exit $?
+    echo
+fi
+[ "$problem" = "5" ] && exit

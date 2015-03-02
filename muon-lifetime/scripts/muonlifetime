@@ -1,0 +1,188 @@
+#!/bin/bash
+
+################################################################################
+## This code os for the muon lifetime lab of the UC Berkeley Physics Advanced
+## Lab course.
+## Copyright (C) 2013  Rachel Domagalski: idomagalski@berkeley.edu
+##
+## This program is free software: you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation, either version 3 of the License, or
+## (at your option) any later version.
+##
+## This program is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with this program.  If not, see <http://www.gnu.org/licenses/>.
+################################################################################
+
+# WARNING: Some filenames for certain data files are hardcoded into this script.
+
+# Setup the environment
+MUO="$( cd "$(dirname "${BASH_SOURCE[0]}" )"/.. && pwd)"
+export PATH="${PATH}:${MUO}/bin"
+DATA="${MUO}/data"
+TXTDATA="${DATA}/txt"
+FITSDATA="${DATA}/fits"
+PDFPLOT="${DATA}/pdf"
+
+# Detect python version
+pyver=`python -c 'import sys; print(sys.version)'`
+pyver="${pyver%%.*}"
+if [ "$pyver" != "2" ]; then
+    python=python2
+else
+    python=python
+fi
+
+quietopt=""
+while getopts "q" OPTION; do
+    case "$OPTION" in
+        q) quietopt=true       ;; # Disable plot display
+    esac
+done
+
+quiet=""
+[ "$quietopt" ] && quiet="-q"
+
+# Convert text files to fits files.
+fitsfiles=`find "$FITSDATA" -type f -name "*.fits"`
+if [ "X$fitsfiles" != "X" ]; then
+    echo "Cleaning out old FITS files."
+    rm -rvf $FITSDATA/*
+    echo
+fi
+
+pdffiles=`find "$PDFPLOT" -type f -name "*.pdf"`
+if [ "X$pdffiles" != "X" ]; then
+    echo "Cleaning out old plots."
+    rm -rvf $PDFPLOT/*
+    echo
+fi
+
+echo "Converting text files to FITS."
+textfiles=`find $TXTDATA -type f -name "*.txt"`
+if [ "X$textfiles" = "X" ]; then
+    echo "No data files found!."
+    exit 1
+fi
+for filename in `find "$TXTDATA" -type f -name "*.txt"`; do
+    infile="$filename"
+    filedir="${filename%/*}"
+    if [ "$filedir" != "$TXTDATA" ]; then
+        filedir="${filedir##*/}"
+        filedir="${filedir#$TXTDATA}"
+        filedir="$FITSDATA/$filedir"
+    else
+        filedir="$FITSDATA"
+    fi
+    filebase=`basename "$filename"`
+    mkdir -p -v "$filedir"
+    filebase="${filebase%.txt}.fits"
+    outfile="$filedir/$filebase"
+    mu2fits -i $infile -o $outfile || exit $?
+    echo
+done
+
+# Combine the overnight runs
+catmufits -o $FITSDATA/MUOCombinedLoTh.fits \
+    $FITSDATA/MUO99overnight.fits $FITSDATA/MUO910overnight.fits || exit $?
+echo
+catmufits -o $FITSDATA/MUOCombinedMidTh.fits \
+    $FITSDATA/MUOWeekendRun.fits  $FITSDATA/MUO916overnight.fits || exit $?
+echo
+catmufits -o $FITSDATA/MUOCombinedHiTh.fits \
+    $FITSDATA/MUO918overnight.fits $FITSDATA/MUO919overnight.fits || exit $?
+echo
+
+# Compute the time resolution
+timeres -i $FITSDATA/MUOTimeResolution.fits || exit $?
+echo
+i$python -- $MUO/bin/plot_timeres.py \
+    $quiet -i $FITSDATA/MUOTimeResolution.fits \
+    -o $PDFPLOT/MUOTimeResolution.pdf || exit $?
+echo
+
+# Calculate the efficiency of the digitizer
+eff_dig -i $FITSDATA/MUOEfficiency/MUOCh0Efficiency.fits || exit $?
+echo
+i$python -- $MUO/bin/plot_eff_dig.py \
+    $quiet -i $FITSDATA/MUOEfficiency/MUOCh0Efficiency.fits \
+    -o $PDFPLOT/MUOCh0Efficiency.pdf || exit $?
+echo
+
+eff_dig -i $FITSDATA/MUOEfficiency/MUOCh1Efficiency.fits || exit $?
+echo
+i$python -- $MUO/bin/plot_eff_dig.py \
+    $quiet -i $FITSDATA/MUOEfficiency/MUOCh1Efficiency.fits \
+    -o $PDFPLOT/MUOCh1Efficiency.pdf || exit $?
+echo
+
+# Calibrate the digitizer clock
+dcalib -i $FITSDATA/MUOClockCh0 -o $FITSDATA/MUOClockCalibCh0.fits
+echo
+i$python -- $MUO/bin/plot_clockcalib.py $quiet \
+    -i $FITSDATA/MUOClockCalibCh0.fits \
+    -o  $PDFPLOT/MUOClockCalibCh0.pdf || exit $?
+echo
+
+dcalib -i $FITSDATA/MUOClockCh1 -o $FITSDATA/MUOClockCalibCh1.fits
+echo
+i$python -- $MUO/bin/plot_clockcalib.py $quiet \
+    -i $FITSDATA/MUOClockCalibCh1.fits \
+    -o  $PDFPLOT/MUOClockCalibCh1.pdf || exit $?
+echo
+
+# Test the linearity of the pulse height measurement
+plinear -i $FITSDATA/MUOLinear1 -o $FITSDATA/MUODigLinear1.fits || exit $?
+echo
+i$python -- $MUO/bin/plot_plinear.py \
+    $quiet -i $FITSDATA/MUODigLinear1.fits \
+    -o $PDFPLOT/MUODigLinear1.pdf
+echo
+
+plinear -i $FITSDATA/MUOLinear2 -o $FITSDATA/MUODigLinear2.fits || exit $?
+echo
+i$python -- $MUO/bin/plot_plinear.py \
+    $quiet -i $FITSDATA/MUODigLinear2.fits \
+    -o $PDFPLOT/MUODigLinear2.pdf
+echo
+
+# Calculate the muon lifetime
+getlifetime -i $FITSDATA/MUOCombinedLoTh.fits \
+    -c $FITSDATA/MUOClockCalibCh0.fits || exit $?
+echo
+i$python -- $MUO/bin/plot_lifetime.py \
+    $quiet -i $FITSDATA/MUOCombinedLoTh.fits \
+    -c $FITSDATA/MUOClockCalibCh0.fits \
+    -o $PDFPLOT/MUOCombinedLoTh || exit $?
+echo
+
+# Weekend run
+getlifetime -i $FITSDATA/MUOCombinedMidTh.fits \
+    -c $FITSDATA/MUOClockCalibCh0.fits || exit $?
+echo
+i$python -- $MUO/bin/plot_lifetime.py \
+    $quiet -i $FITSDATA/MUOCombinedMidTh.fits \
+    -c $FITSDATA/MUOClockCalibCh0.fits \
+    -o $PDFPLOT/MUOCombinedMidTh || exit $?
+echo
+
+# Last run
+getlifetime -i $FITSDATA/MUOCombinedHiTh.fits \
+    -c $FITSDATA/MUOClockCalibCh0.fits || exit $?
+echo
+i$python -- $MUO/bin/plot_lifetime.py \
+    $quiet -i $FITSDATA/MUOCombinedHiTh.fits \
+    -c $FITSDATA/MUOClockCalibCh0.fits \
+    -o $PDFPLOT/MUOCombinedHighTh || exit $?
+echo
+
+# Display a summary of the results
+$python $MUO/bin/combine_results.py \
+    $FITSDATA/MUOCombinedLoTh.fits \
+    $FITSDATA/MUOCombinedMidTh.fits \
+    $FITSDATA/MUOCombinedHiTh.fits \
